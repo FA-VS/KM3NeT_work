@@ -1,0 +1,63 @@
+cluster:
+  mkdir -p logs/jobs; sleep $((5 + $RANDOM%30 )) &&
+  sbatch
+    --licenses=sps
+    --time={resources.runtime}
+    --mem={resources.mem_mb}
+    --job-name=smk-{rule}-%j
+    --output=logs/jobs/{rule}-%j.out
+    -n {threads}
+    --parsable
+
+cluster-status:
+  status_slurm.py
+
+cluster-cancel:
+  scancel
+
+  #set-resources:
+  #  - "run_kofi:time=6:00:00"
+
+default-resources: # Resources *available* to jobs (...double-check?)
+  #"runtime" is managed automatically by snakemake rules
+  #- runtime=60   # 1 hour (in minutes)
+  - runtime=2880  # 2 days (in minutes)
+  #"mem_mb" is managed automatically by snakemake rules
+  - mem_mb=1000
+  #"disk_mb" is managed automatically by snakemake rules
+  - disk_mb=1000
+
+shadow-prefix: "/tmp" 
+
+# Very important when grouping jobs
+#   When a sub-task of a group job fail, snakemake
+#   tag all the sub-task as failed. To avoid wasting processing
+#   we can keep incomplete output, which will be checked on next the pipeline
+#   is ran.
+keep-incomplete: 1
+rerun-incomplete: 1
+
+jobs: 100
+local-cores: 1
+
+max-jobs-per-second: 1
+max-status-checks-per-second: 0.1
+
+latency-wait: 60
+
+resources:
+  - xrootd_socket=5
+
+rerun-trigger: mtime
+
+groups:
+  - apply_selections=selector_group
+    #- copy_selection_to_scratch=irf_builder_group
+  - build_response_function=irf_builder_group
+  - run_kofi=kofi_group
+  - parse_contour_results=kofi_group
+
+group-components:
+  - selector_group=24
+  - irf_builder_group=10
+  - kofi_group=5

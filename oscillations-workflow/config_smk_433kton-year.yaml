@@ -1,0 +1,66 @@
+version: v9.2
+
+to_produce:
+  - ""
+
+DetIDgroups:
+  "D_ORCA006": ["00000049"]
+
+Selector:
+  dst_common_path: "/sps/km3net/repo/data_processing/tag/{version}/workdirs/KM3NeT_{detid}/results/{detid}/dst/"
+  scores_common_path: "/pbs/home/j/jprado/sps/pid_2_dst/Apply_model/scoreTrees_results/v9.2/{detid}/"
+  output_common_path: ""
+  scores_ttreename: "scores"
+  cut: "muonscore<0.01 && noisescore<2.0e-2 && (Evt->trks[0].dir.z>0 || Evt->trks[1].dir.z>0)"
+
+ResponseFunction:
+  output_path_json: ""
+  output_path_irf: ""
+  singularity: "https://sftp.km3net.de/singularity/irf_v0.7.2.sif"
+  json_preconfig: "/sps/km3net/users/fvazquez/oscillations/IRF_TTreeCreator_preconfig.json"
+  sources_dtype_full: # This governs which sources get processed by IRF
+    # data:   "data.jppmuon_jppshower_dynamic.offline.dst"
+    mu:     "mc.mupage_default.sirene.jterbr.jppmuon_jppshower_static.offline.dst"
+    nu:     "mc.gsg_neutrinos.km3sim_sirene_merged.jterbr.jppmuon_jppshower_static.offline.dst"
+    noise:  "mc.pure_noise.jterbr.jppmuon_jppshower_static.offline.dst"
+  name: "RF_433_kton-year"
+  exposure: 1.0
+  json_args:
+    binning:
+      E_reco:
+        custom: true
+        custom_edges: [2, 2.95752, 4.37345, 5.3183, 6.46727, 7.86447, 9.56352, 11.6296, 14.1421, 17.1974, 20.9128, 25.4308, 30.9249, 55.6102, 100, 1000]
+      Ct_reco:
+        custom: false
+        nbins: 20
+        min: -1.0
+        max: +1.0
+    classes:
+      tracks:
+        cuts:
+          fixedcut: "Evt.trks[0].dir.z>0 && Evt.trks[0].E>2 && Evt.trks[0].E<50"
+      showers:
+        cuts:
+          fixedcut: "Evt.trks[1].dir.z>0 && Evt.trks[1].E>2 && Evt.trks[1].E<1000"
+  detectors:
+    "D_ORCA006":
+      json_args:
+        classes:
+          tracks:
+            cuts:
+              analysis:     "noisescore <= 2e-5 && muonscore <= 2.9e-4  && trackscore > 0.75"
+              loose_mu:     "noisescore <=2e-4 && muonscore <= 4.4e-3   && trackscore > 0.75"
+              loose_noise:  "noisescore <=2e-4 && muonscore <= 4.4e-3   && trackscore > 0.75"
+          showers:
+            cuts:
+              analysis:     "noisescore <=2e-5 && muonscore <= 3.0e-3  && trackscore < 0.75"
+              loose_mu:     "noisescore <=2e-4 && muonscore <= 4.4e-3  && trackscore < 0.75"
+              loose_noise:  "noisescore <=2e-4 && muonscore <= 4.4e-3  && trackscore < 0.75"
+
+
+KOFI:
+  singularity: "https://sftp.km3net.de/singularity/kofi_v0.10.0.sif"
+  flux: "frj-ally-20-01-solmin.dat"
+  output:
+    common: "433kton-year"
+

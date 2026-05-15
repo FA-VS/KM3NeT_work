@@ -1,0 +1,17 @@
+FROM rootproject/root:6.30.04-ubuntu22.04
+LABEL maintainer="Francisco Vazquez de Sola <fvazquezdesola@km3net.de>"
+
+RUN  apt-get -qq update && \
+     apt-get -qq install libgsl-dev libbz2-dev git
+
+ADD . /IRF
+
+RUN echo 'exec "$@"' >> /IRF/setenv.sh
+ARG IRF_DIR="/IRF"
+ARG PATH=$IRF_DIR:${PATH}
+
+RUN cd /IRF && make 
+
+ENTRYPOINT [ "/IRF/setenv.sh" ]
+
+

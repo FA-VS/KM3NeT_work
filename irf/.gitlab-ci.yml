@@ -1,0 +1,157 @@
+image: rootproject/root:6.30.04-ubuntu22.04
+
+variables:
+  # GIT_CLEAN_FLAGS: none
+  GIT_SUBMODULE_STRATEGY: recursive
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+  CONTAINER_TEST_IMAGE: git.km3net.de:4567/oscillation/irf:$CI_COMMIT_REF_SLUG
+  CONTAINER_RELEASE_IMAGE: git.km3net.de:4567/oscillation/irf:$CI_COMMIT_TAG
+  CONTAINER_LATEST_IMAGE: git.km3net.de:4567/oscillation/irf:latest
+  SINGULARITY_RELEASE_IMAGE: irf_${CI_COMMIT_TAG}.sif
+
+stages:
+  - build
+    #  - test
+  - docker
+  - release
+
+.standard-rules:       # Make a hidden job to hold the common rules
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+      changes:
+        - "**/*.cc"
+        - "**/*.hh"
+        - json/**/*
+        - km3net-dataformat/**/*
+        - "**/Makefile"
+        - Makefile
+        - standard.mk
+    - when: never
+
+.ssh-key-setup:
+  before_script:
+    ##
+    ## Install ssh-agent if not already installed, it is required by Docker.
+    ## (change apt-get to yum if you use an RPM-based image)
+    ##
+    - 'command -v ssh-agent >/dev/null || ( apt-get update -y && apt-get install openssh-client -y )'
+
+    ##
+    ## Run ssh-agent (inside the build environment)
+    ##
+    - eval $(ssh-agent -s)
+
+    ##
+    ## Give the right permissions, otherwise ssh-add will refuse to add files
+    ## Add the SSH key stored in SSH_PRIVATE_KEY file type CI/CD variable to the agent store
+    ##
+    - chmod 400 "$SSH_PRIVATE_KEY"
+    - ssh-add "$SSH_PRIVATE_KEY"
+
+    ##
+    ## Create the SSH directory and give it the right permissions
+    ##
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+
+    ##
+    ## Add host key to known keys
+    - ssh-keyscan -t rsa git.km3net.de >> ~/.ssh/known_hosts
+
+
+build_submodules:
+  rules:
+    - !reference [.standard-rules, rules]
+  stage: build
+  before_script:
+    - !reference [.ssh-key-setup, before_script]
+    - source /opt/root/bin/thisroot.sh
+    - source setenv.sh
+  script:
+    - make json
+    - make km3net-dataformat
+  artifacts:
+    paths:
+      - json
+      - km3net-dataformat
+
+build:
+  rules:
+    - !reference [.standard-rules, rules]
+  stage: build
+  needs:
+    - build_submodules
+  before_script:
+    - source /opt/root/bin/thisroot.sh
+    - source setenv.sh
+  script:
+    - make
+
+#test:
+#  extends:
+#    - .standard-rules
+#  stage: test
+#  script:
+#    - source setenv.sh
+#    - make test
+#  dependencies:
+#    - build
+
+docker:
+  #image: docker.km3net.de/base/docker:20.10.5
+  image: docker:28
+  services:
+    - docker:28-dind
+  stage: docker
+  dependencies:
+    - build_submodules
+  before_script:
+    - !reference [.ssh-key-setup, before_script]
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build --pull -t $CONTAINER_TEST_IMAGE .
+    - docker push $CONTAINER_TEST_IMAGE
+  tags:
+    - docker
+  only:
+    - tags
+    - release
+
+release-docker:
+  #image: docker.km3net.de/base/docker:20.10.5
+  image: docker:28
+  services:
+    - docker:28-dind
+  stage: release
+  dependencies: []
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker pull $CONTAINER_TEST_IMAGE
+    - docker tag $CONTAINER_TEST_IMAGE $CONTAINER_RELEASE_IMAGE
+    - docker tag $CONTAINER_TEST_IMAGE $CONTAINER_LATEST_IMAGE
+    - docker push $CONTAINER_RELEASE_IMAGE
+    - docker push $CONTAINER_LATEST_IMAGE
+  tags:
+    - docker
+  only:
+    - tags
+    - release
+  when: manual
+
+release-singularity:
+  image: docker.km3net.de/base/singularity:3.6.2
+  stage: release
+  dependencies: []
+  script:
+    - SINGULARITY_DOCKER_USERNAME=$CI_REGISTRY_USER SINGULARITY_DOCKER_PASSWORD=$CI_REGISTRY_PASSWORD singularity build $SINGULARITY_RELEASE_IMAGE docker://$CONTAINER_TEST_IMAGE
+    - du -sh $SINGULARITY_RELEASE_IMAGE
+    - mkdir -p ~/.ssh && ssh-keyscan -H -t rsa $KM3NET_SFTP_HOST  >> ~/.ssh/known_hosts
+    - apt install -q lftp
+    - lftp -u $KM3NET_SFTP_USER,$KM3NET_SFTP_PASSWORD sftp://$KM3NET_SFTP_HOST -e "set ssl:verify-certificate no; cd singularity/; put $SINGULARITY_RELEASE_IMAGE; bye"
+  only:
+    - tags
+    - release
+  when: manual
+
+

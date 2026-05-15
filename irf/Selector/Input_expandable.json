@@ -1,0 +1,10 @@
+{
+  "inputfile": "/data/antares/users/hlumengo/Merged_dsts/KM3NeT_00000100_Qlow1/KM3NeT_00000100_Qlow1_00012XXX.mc.mupage.jterbr.jppmuon_jppshower-upgoing_static.offline.dst.v9.0.root",
+  "outputfile": "/project/antares/fvazquez/irf/rootfiles/Test_expandable_muons.root",
+  "friendtrees": {
+    "/data/antares/users/hlumengo/PID/v9.0_selection_trees/KM3NeT_00000100_Qlow1/SelectedEventsTree_PID_KM3NeT_00000100_Qlow1_00012XXX.mc.mupage.jterbr.jppmuon_jppshower-upgoing_static.offline.dst.v9.0.root.root" :
+    ["sel"]
+  },
+  "TCut": "muonscore<0.1 && noisescore < 0.5 && runs_neutrino2024_veto_sparks && (Evt->trks[0].dir.z>0 || Evt->trks[1].dir.z>0)"
+}
+

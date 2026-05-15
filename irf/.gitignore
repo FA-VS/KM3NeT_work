@@ -1,0 +1,41 @@
+### Below combination will ignore all files without extension ###
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.*
+
+# Unignore all dirs
+!*/
+
+### Above combination will ignore all files without extension ###
+### Any additional rules must come after this point ###
+
+# Dockerfiles?
+!dockerfile
+
+### Add some standard ignore rules ###
+# Compiled source #
+###################
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Packages #
+############
+# it's better to unpack these files and commit the raw source
+# git has its own built in compression methods
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# KM3NeT specific
+*.root

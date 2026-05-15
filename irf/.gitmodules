@@ -1,0 +1,8 @@
+[submodule "json"]
+	path = json
+	url = https://github.com/nlohmann/json.git
+[submodule "km3net-dataformat"]
+	path = km3net-dataformat
+  #url = git@git.km3net.de:common/km3net-dataformat.git
+  url = ../../common/km3net-dataformat.git
+  ignore = dirty

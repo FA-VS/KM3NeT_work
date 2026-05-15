@@ -1,0 +1,3 @@
+# Set python syntax highlighting for Snakefile
+*Snakefile gitlab-language=python
+*.smk gitlab-language=python

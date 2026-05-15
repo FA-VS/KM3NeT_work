@@ -1,0 +1,140 @@
+# Workflow configuration
+from snakemake.logging import logger
+from rules.workflow_configuration import make_extended_config, set_singularity_args
+from rules.onerror import onerror_wrapper
+from rules.onsuccess import onsuccess_wrapper
+
+# Helper functions need to be imported in the main Snakefile
+from utils import deep_update, get_detector_config, redirect_to_log, make_compact_inputlist, compact_message_template
+
+# Imports needed in rules
+import os
+import json
+import copy
+import shutil
+import numpy as np
+
+# Setup
+extended_config = make_extended_config(workflow, config)
+set_singularity_args(workflow, config, extended_config)
+
+onerror: onerror_wrapper(workflow, config)
+onsuccess: onsuccess_wrapper(workflow, config)
+
+# Aux variables and functions that use config must be defined in the main Snakefile
+def expand_on_run_for_detid(filename):
+  """Provide a function that extend filename with run list according to detid """
+  def func(wildcards):
+    runs = extended_config['detids_runs_to_do'][wildcards.detid]
+    return expand(filename, run = runs)
+  return func
+
+def optimization_wildcard_explicit():
+  """
+  Generate string with explicit wildcards for all optimization parameters.
+  Note that the numerical values are NOT filled in, just the names.
+  """
+  #TODO: is there any way to make this depend on detid/detid_group without breaking the workflow?
+  opt_wildcard_explicit = ""
+  for cutvar_name in extended_config['optimization_values_to_do']['cuts'].keys():
+      opt_wildcard_explicit += f"_{cutvar_name}{{{cutvar_name}}}"
+  return opt_wildcard_explicit
+
+def expand_on_optimization_values(filename):
+  """Extend filename with implicit optimization_wildcard with ALL combination of values to optimize"""
+  opt_wc_explicit = optimization_wildcard_explicit()
+  filename_explicit = filename.replace("{optimization_wildcard}", opt_wc_explicit)
+  return expand(filename_explicit, **extended_config['optimization_values_to_do']['cuts'])
+
+opt_wildcard_constraint = ".*" # Need to do this to allow for the wildcard to become empty
+if len(extended_config['optimization_values_to_do']['cuts'])>0:
+  opt_wildcard_constraint = ""
+  for cutvar_name in extended_config['optimization_values_to_do']['cuts'].keys():
+    opt_wildcard_constraint += f"_{cutvar_name}.+" #This should be optional, i.e "?" at the end?
+
+
+wildcard_constraints:
+    version=r"v\d+\.\d+.*",
+    detid=r"\d{8}",
+    run=r"\d{8}",
+    optimization_wildcard=opt_wildcard_constraint
+
+# RULES
+include: "rules/all.smk"
+
+# User rules
+rule all:
+    localrule: True
+    input:
+        expand( 
+           config['to_produce'], 
+           version = config['version']
+        )
+
+rule make_irf:
+    localrule: True
+    input:
+       f"Analysis/inputs/{config['ResponseFunction']['name']}.{config['version']}.root",
+       f"Analysis/inputs/ResponseFunction/{config['ResponseFunction']['name']}.{config['version']}.json"
+
+rule make_selector:
+    localrule: True
+    input:
+        expand(
+           "Selector/{detid}/merged/KM3NeT_{detid}.{dtype}.{version}.selection.root",
+           detid = extended_config["detids_runs_to_do"].keys(),
+           dtype = config['ResponseFunction']['sources_dtype_full'].values(),
+           version=config["version"],
+        )
+
+# The following rules to illustrate how to traverse all possible optimization values
+rule make_irf_alloptvalues:
+    """PLACEHOLDER"""
+    localrule: True
+    input:
+      expand_on_optimization_values(f"Analysis/inputs/{config['ResponseFunction']['name']}.{config['version']}{{optimization_wildcard}}.root"),
+      expand_on_optimization_values(f"Analysis/inputs/ResponseFunction/{config['ResponseFunction']['name']}.{config['version']}{{optimization_wildcard}}.json")
+
+rule optimize_contour:
+    localrule: True
+    input:
+        irf_path = f"Analysis/inputs/{config['ResponseFunction']['name']}.{config['version']}_optimizedContour.root",
+        irf_json = f"Analysis/inputs/ResponseFunction/{config['ResponseFunction']['name']}.{config['version']}_optimizedContour.json"
+
+rule optimize_interval:
+    localrule: True
+    input:
+        irf_path = f"Analysis/inputs/{config['ResponseFunction']['name']}.{config['version']}_optimizedInterval.root",
+        irf_json = f"Analysis/inputs/ResponseFunction/{config['ResponseFunction']['name']}.{config['version']}_optimizedInterval.json"
+
+
+# The following rules are only for user convenience when calling snakemake
+rule make_kofi_benchmark:
+    localrule: True
+    input:
+      requested_file = "flags/Benchmark."+config['version']+".DONE"
+
+rule make_kofi_fit:
+    localrule: True
+    input:
+      requested_file = "flags/Fit."+config['version']+".DONE"
+
+rule make_kofi_interval:
+    localrule: True
+    input:
+      requested_file = "flags/Interval."+config['version']+".DONE"
+
+rule make_kofi_contour:
+    localrule: True
+    input:
+      requested_file = "flags/Contour."+config['version']+".DONE"
+
+rule make_physics_target:
+    localrule: True
+    input:
+      requested_files = [
+          "flags/Benchmark."+config['version']+".DONE",
+          "flags/Fit."+config['version']+".DONE",
+          "flags/Interval."+config['version']+".DONE",
+          "flags/Contour."+config['version']+".DONE"
+      ]

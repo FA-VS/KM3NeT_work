@@ -1,0 +1,53 @@
+jobscript:
+  stbc-jobscript.sh
+cluster:
+  stbc-submit.py
+cluster-status:
+  stbc-status.py
+cluster-cancel:
+  condor_rm
+
+
+  #set-resources:
+  #  - "run_kofi:time=6:00:00"
+  
+default-resources:
+  - runtime=60 #minutes
+  - mem_mb=1010 #TODO: check this
+  - disk_mb=1000 #TODO: check this
+  - queue=express #or short?
+
+shadow-prefix: "/tmp" 
+
+# Very important when grouping jobs
+#   When a sub-task of a group job fail, snakemake
+#   tag all the sub-task as failed. To avoid wasting processing
+#   we can keep incomplete output, which will be checked on next the pipeline
+#   is ran.
+keep-incomplete: 1
+rerun-incomplete: 1
+
+jobs: 1000
+local-cores: 1
+
+max-jobs-per-second: 1
+max-status-checks-per-second: 20
+
+latency-wait: 60
+
+  #resources:
+  #  - xrootd_socket=5
+
+rerun-trigger: mtime
+
+groups:
+  - apply_selections=selector_group
+    #- copy_selection_to_scratch=irf_builder_group
+  - build_response_function=irf_builder_group
+  - run_kofi=kofi_group
+  - parse_contour_results=kofi_group
+
+group-components:
+  - selector_group=100
+  - irf_builder_group=5
+  - kofi_group=20
